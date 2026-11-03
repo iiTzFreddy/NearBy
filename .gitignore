@@ -1,0 +1,18 @@
+# Build output
+build/
+out/
+*.exe
+*.obj
+*.o
+*.pdb
+*.ilk
+
+# Raw and cleaned datasets are never committed (see progress.md for download steps)
+data/
+
+# Editors and tools
+.vs/
+.vscode/
+.idea/
+__pycache__/
+.venv/
