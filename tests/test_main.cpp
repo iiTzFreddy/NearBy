@@ -12,9 +12,11 @@
 #include <vector>
 
 #include "bench.hpp"
+#include "bounded_heap.hpp"
 #include "brute.hpp"
 #include "geo.hpp"
 #include "index_contract.hpp"
+#include "kdtree.hpp"
 #include "loader.hpp"
 
 namespace {
@@ -465,6 +467,104 @@ void testMismatchDetection() {
     CHECK(!firstMismatch(base, {{1, 1.0}, {2, 2.0000000001}}).empty());
 }
 
+// Checks the quickselect postcondition: idx[nth] holds the sorted value, with
+// nothing larger before it and nothing smaller after it.
+bool selectedCorrectly(const std::vector<uint32_t>& idx, size_t begin, size_t end, size_t nth,
+                       const std::vector<Location>& pts, int axis) {
+    auto key = [&](size_t i) { return axis == 0 ? pts[idx[i]].lat : pts[idx[i]].lon; };
+
+    std::vector<double> sorted;
+    for (size_t i = begin; i < end; ++i) sorted.push_back(key(i));
+    std::sort(sorted.begin(), sorted.end());
+    if (key(nth) != sorted[nth - begin]) return false;
+
+    for (size_t i = begin; i < nth; ++i) {
+        if (key(i) > key(nth)) return false;
+    }
+    for (size_t i = nth + 1; i < end; ++i) {
+        if (key(i) < key(nth)) return false;
+    }
+    return true;
+}
+
+void testQuickselect() {
+    std::mt19937_64 rng(7);
+    const std::vector<Location> uniform = generateSynthetic(SyntheticKind::Uniform, 500, 7);
+
+    for (int trial = 0; trial < 200; ++trial) {
+        std::vector<uint32_t> idx(uniform.size());
+        for (size_t i = 0; i < idx.size(); ++i) idx[i] = static_cast<uint32_t>(i);
+        const size_t begin = rng() % 100;
+        const size_t end = begin + 1 + rng() % (idx.size() - begin);
+        const size_t nth = begin + rng() % (end - begin);
+        const int axis = trial % 2;
+        quickselect(idx, begin, end, nth, uniform, axis);
+        CHECK(selectedCorrectly(idx, begin, end, nth, uniform, axis));
+
+        // The range is permuted, and nothing outside it moves.
+        std::vector<uint32_t> sortedIdx = idx;
+        std::sort(sortedIdx.begin(), sortedIdx.end());
+        for (size_t i = 0; i < sortedIdx.size(); ++i) CHECK(sortedIdx[i] == i);
+        for (size_t i = 0; i < begin; ++i) CHECK(idx[i] == i);
+        for (size_t i = end; i < idx.size(); ++i) CHECK(idx[i] == i);
+    }
+
+    // All keys equal, and already-sorted keys: the inputs that break naive pivots.
+    std::vector<Location> same, ascending;
+    for (int i = 0; i < 1000; ++i) {
+        same.push_back({i, 29.65, -82.32});
+        ascending.push_back({i, -90.0 + 0.18 * i, -180.0 + 0.36 * i});
+    }
+    for (const std::vector<Location>* pts : {&same, &ascending}) {
+        for (int axis = 0; axis < 2; ++axis) {
+            std::vector<uint32_t> idx(pts->size());
+            for (size_t i = 0; i < idx.size(); ++i) idx[i] = static_cast<uint32_t>(i);
+            quickselect(idx, 0, idx.size(), idx.size() / 2, *pts, axis);
+            CHECK(selectedCorrectly(idx, 0, idx.size(), idx.size() / 2, *pts, axis));
+        }
+    }
+}
+
+void testBoundedHeap() {
+    // Ids run backwards from the array order, so ties are broken by id, not idx.
+    std::vector<Location> pts;
+    for (int i = 0; i < 50; ++i) pts.push_back({100 - i, 0.0, 0.0});
+
+    std::mt19937_64 rng(11);
+    for (size_t k : {size_t{0}, size_t{1}, size_t{5}, size_t{50}, size_t{80}}) {
+        std::vector<Result> all;
+        BoundedMaxHeap heap(k, pts);
+        for (uint32_t i = 0; i < pts.size(); ++i) {
+            const Result r = {i, static_cast<double>(rng() % 10)};  // plenty of ties
+            all.push_back(r);
+            heap.offer(r);
+            CHECK(heap.size() == std::min(k, static_cast<size_t>(i) + 1));
+        }
+
+        std::sort(all.begin(), all.end(), ResultOrder{&pts});
+        all.resize(std::min(k, all.size()));
+        CHECK(firstMismatch(all, heap.takeSorted()).empty());
+        CHECK(heap.size() == 0);
+    }
+}
+
+void testKdTreeBasics() {
+    KdTree tree;
+    CHECK(tree.name() == "KdTree");
+    CHECK(tree.kNearest(0, 0, 5).empty());  // queried before build
+
+    const std::vector<Location> pts = generateSynthetic(SyntheticKind::Clustered, 10000, 3);
+    tree.build(pts);
+    CHECK(tree.memoryBytes() > pts.size() * sizeof(uint32_t));
+
+    // Rebuilding on different data must not keep anything from the first build.
+    const std::vector<Location> small = {{1, 10.0, 10.0}, {2, 10.0, 10.5}};
+    tree.build(small);
+    const std::vector<Result> nearest = tree.kNearest(10.0, 10.1, 5);
+    CHECK(nearest.size() == 2);
+    CHECK(!nearest.empty() && nearest[0].idx == 0);
+}
+
 }  // namespace
 
 int main() {
@@ -481,12 +581,17 @@ int main() {
     testPercentile();
     testBenchmarkCsv();
     testTuningCsv();
+    testQuickselect();
+    testBoundedHeap();
+    testKdTreeBasics();
 
     BruteForce brute;
     failures += runIndexContract(brute);
 
-    // When the trees land, add them here:
-    //   KdTree kdTree;     failures += runIndexContract(kdTree);
+    KdTree kdTree;
+    failures += runIndexContract(kdTree);
+
+    // When the quadtree lands, add it here:
     //   QuadTree quadTree; failures += runIndexContract(quadTree);
 
     if (failures != 0) {

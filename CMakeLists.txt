@@ -18,12 +18,13 @@ else()
   add_compile_options(-Wall -Wextra -Wpedantic)
 endif()
 
-# Add src/kdtree.cpp and src/quadtree.cpp here as they land.
+# Add src/quadtree.cpp here when it lands.
 add_library(nearby_core STATIC
   src/geo.cpp
   src/loader.cpp
   src/brute.cpp
   src/bench.cpp
+  src/kdtree.cpp
 )
 target_include_directories(nearby_core PUBLIC src)
 
