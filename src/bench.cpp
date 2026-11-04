@@ -181,6 +181,35 @@ std::vector<Location> shuffled(std::vector<Location> pts, uint64_t seed) {
     return pts;
 }
 
+// Alternates real data points with points spread uniformly over the whole sphere,
+// not just the data's bounding box, so poles and the 180th meridian get queried too.
+std::vector<Query> makeVerifyQueries(const std::vector<Location>& pts, size_t count, uint64_t seed) {
+    constexpr double kRadToDeg = 180.0 / 3.14159265358979323846;
+    std::mt19937_64 rng(seed);
+    std::vector<Query> queries;
+    queries.reserve(count);
+    for (size_t i = 0; i < count; ++i) {
+        if (i % 2 == 0 && !pts.empty()) {
+            const Location& p = pts[rng() % pts.size()];
+            queries.push_back({p.lat, p.lon});
+        } else {
+            // asin(uniform in [-1, 1]) gives latitudes uniform by area.
+            const double lat = std::asin(2.0 * randomUnit(rng) - 1.0) * kRadToDeg;
+            const double lon = -180.0 + 360.0 * randomUnit(rng);
+            queries.push_back({lat, lon});
+        }
+    }
+    return queries;
+}
+
+bool sameResults(const std::vector<Result>& a, const std::vector<Result>& b) {
+    if (a.size() != b.size()) return false;
+    for (size_t i = 0; i < a.size(); ++i) {
+        if (a[i].idx != b[i].idx || a[i].dist_km != b[i].dist_km) return false;
+    }
+    return true;
+}
+
 }  // namespace
 
 std::vector<std::unique_ptr<SpatialIndex>> makeAllIndexes() {
@@ -277,4 +306,82 @@ void runTuning(const std::vector<Location>& pts, const TunableFactory& factory,
 
 TunableFactory quadTreeFactory() {
     return [](int bucket, int depth) { return std::make_unique<QuadTree>(bucket, depth); };
+}
+
+int verifyAgainstBruteForce(const std::vector<Location>& pts, size_t queryCount, uint64_t seed,
+                            std::ostream& out) {
+    // Ascending, so the largest of each is last.
+    const std::vector<int> ks = {1, 5, 10, 100};
+    const std::vector<double> radiiKm = {0.5, 5.0, 50.0, 500.0};
+
+    BruteForce brute;
+    brute.build(pts);
+
+    std::vector<std::unique_ptr<SpatialIndex>> indexes;
+    for (std::unique_ptr<SpatialIndex>& index : makeAllIndexes()) {
+        if (index->name() == brute.name()) continue;
+        index->build(pts);
+        indexes.push_back(std::move(index));
+    }
+
+    const std::vector<Query> queries = makeVerifyQueries(pts, queryCount, seed);
+    out << "Checking " << indexes.size() << " structure(s) against BruteForce on " << pts.size()
+        << " points, " << queries.size() << " queries (seed " << seed << ")\n";
+
+    std::vector<int> mismatches(indexes.size(), 0);
+    int reported = 0;
+    auto check = [&](size_t which, const Query& q, const std::string& what,
+                     const std::vector<Result>& expected, const std::vector<Result>& actual) {
+        if (sameResults(expected, actual)) return;
+        ++mismatches[which];
+        if (++reported <= 5) {
+            out << "  MISMATCH " << indexes[which]->name() << ' ' << what << " at ("
+                << q.lat << ", " << q.lon << "): expected " << expected.size() << " results, got "
+                << actual.size() << '\n';
+        }
+    };
+
+    for (size_t qi = 0; qi < queries.size(); ++qi) {
+        const Query& q = queries[qi];
+
+        // Results follow one total order, (dist_km, id). So the brute-force answer for
+        // a smaller k is a prefix of the answer for the largest k, and the answer for a
+        // smaller radius is the part of the largest radius's answer within it. Brute
+        // force then runs twice per query instead of once per parameter.
+        const std::vector<Result> nearest = brute.kNearest(q.lat, q.lon, ks.back());
+        const std::vector<Result> inRadius = brute.withinRadius(q.lat, q.lon, radiiKm.back());
+
+        for (int k : ks) {
+            const size_t keep = std::min(static_cast<size_t>(k), nearest.size());
+            const std::vector<Result> expected(nearest.begin(),
+                                               nearest.begin() + static_cast<std::ptrdiff_t>(keep));
+            for (size_t i = 0; i < indexes.size(); ++i) {
+                check(i, q, "kNearest k=" + std::to_string(k), expected,
+                      indexes[i]->kNearest(q.lat, q.lon, k));
+            }
+        }
+        for (double r : radiiKm) {
+            std::vector<Result> expected;
+            for (const Result& hit : inRadius) {
+                if (hit.dist_km <= r) expected.push_back(hit);
+            }
+            for (size_t i = 0; i < indexes.size(); ++i) {
+                check(i, q, "withinRadius r=" + std::to_string(r), expected,
+                      indexes[i]->withinRadius(q.lat, q.lon, r));
+            }
+        }
+
+        if ((qi + 1) % 50 == 0) {
+            out << "  " << qi + 1 << " / " << queries.size() << " queries\n" << std::flush;
+        }
+    }
+
+    const size_t checksPerStructure = queries.size() * (ks.size() + radiiKm.size());
+    int total = 0;
+    for (size_t i = 0; i < indexes.size(); ++i) {
+        out << "  " << indexes[i]->name() << ": " << mismatches[i] << " mismatch(es) in "
+            << checksPerStructure << " checks\n";
+        total += mismatches[i];
+    }
+    return total;
 }
