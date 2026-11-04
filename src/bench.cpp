@@ -12,6 +12,7 @@
 #include <utility>
 
 #include "brute.hpp"
+#include "kdtree.hpp"
 #include "loader.hpp"
 
 namespace {
@@ -184,8 +185,8 @@ std::vector<Location> shuffled(std::vector<Location> pts, uint64_t seed) {
 std::vector<std::unique_ptr<SpatialIndex>> makeAllIndexes() {
     std::vector<std::unique_ptr<SpatialIndex>> indexes;
     indexes.push_back(std::make_unique<BruteForce>());
-    // When the trees land, add them here:
-    //   indexes.push_back(std::make_unique<KdTree>());
+    indexes.push_back(std::make_unique<KdTree>());
+    // When the quadtree lands, add it here:
     //   indexes.push_back(std::make_unique<QuadTree>());
     return indexes;
 }
