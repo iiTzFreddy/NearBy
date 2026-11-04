@@ -130,6 +130,24 @@ std::vector<Location> loadLocations(const std::string& path) {
     return pts;
 }
 
+void saveCleanStats(const std::string& cachePath, const CleanStats& stats) {
+    const std::string path = cachePath + ".stats";
+    std::ofstream out(path);
+    out << stats.rowsRead << ' ' << stats.malformed << ' ' << stats.outOfRange << ' '
+        << stats.zeroZero << ' ' << stats.duplicates << ' ' << stats.kept << '\n';
+    if (!out) throw std::runtime_error("failed while writing " + path);
+}
+
+bool loadCleanStats(const std::string& cachePath, CleanStats& stats) {
+    std::ifstream in(cachePath + ".stats");
+    CleanStats loaded;
+    in >> loaded.rowsRead >> loaded.malformed >> loaded.outOfRange >> loaded.zeroZero >>
+        loaded.duplicates >> loaded.kept;
+    if (!in) return false;
+    stats = loaded;
+    return true;
+}
+
 std::vector<Location> generateSynthetic(SyntheticKind kind, size_t n, uint64_t seed) {
     constexpr size_t kClusterCount = 20;
     constexpr double kClusterSpreadDeg = 2.0;

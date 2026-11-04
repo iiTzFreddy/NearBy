@@ -7,7 +7,7 @@ out/
 *.pdb
 *.ilk
 
-# Raw and cleaned datasets are never committed (see progress.md for download steps)
+# Raw and cleaned datasets are never committed
 data/
 
 # Editors and tools

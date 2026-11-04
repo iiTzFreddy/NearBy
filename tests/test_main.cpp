@@ -4,11 +4,14 @@
 #include <filesystem>
 #include <fstream>
 #include <iostream>
+#include <memory>
 #include <random>
 #include <stdexcept>
 #include <string>
+#include <utility>
 #include <vector>
 
+#include "bench.hpp"
 #include "brute.hpp"
 #include "geo.hpp"
 #include "index_contract.hpp"
@@ -329,6 +332,131 @@ void testBruteForce() {
     CHECK(emptyIndex.memoryBytes() > 0);
 }
 
+void testCleanStatsFile() {
+    const std::string cache = tempPath("stats_cache.bin");
+
+    CleanStats stats;
+    stats.rowsRead = 100;
+    stats.malformed = 1;
+    stats.outOfRange = 2;
+    stats.zeroZero = 3;
+    stats.duplicates = 4;
+    stats.kept = 90;
+    saveCleanStats(cache, stats);
+
+    CleanStats loaded;
+    CHECK(loadCleanStats(cache, loaded));
+    CHECK(loaded.rowsRead == 100);
+    CHECK(loaded.malformed == 1);
+    CHECK(loaded.outOfRange == 2);
+    CHECK(loaded.zeroZero == 3);
+    CHECK(loaded.duplicates == 4);
+    CHECK(loaded.kept == 90);
+    std::remove((cache + ".stats").c_str());
+
+    CHECK(!loadCleanStats(cache, loaded));
+}
+
+void testPercentile() {
+    std::vector<double> values;
+    CHECK(percentile(values, 95) == 0.0);
+
+    values = {5.0};
+    CHECK(percentile(values, 95) == 5.0);
+
+    for (int i = 100; i >= 2; --i) values.push_back(i);  // 2..100 plus the 5 above
+    values[0] = 1.0;                                     // now exactly 1..100, unsorted
+    CHECK(percentile(values, 95) == 95.0);
+    CHECK(percentile(values, 50) == 50.0);
+    CHECK(percentile(values, 100) == 100.0);
+}
+
+std::vector<std::string> readLines(const std::string& path) {
+    std::ifstream in(path);
+    std::vector<std::string> lines;
+    std::string line;
+    while (std::getline(in, line)) lines.push_back(line);
+    return lines;
+}
+
+BenchConfig tinyBenchConfig() {
+    BenchConfig config = quickBenchConfig();
+    config.sizes = {100, 300};
+    config.ks = {1, 10};
+    config.radiiKm = {10.0};
+    config.queryCount = 30;
+    config.minQueries = 5;
+    config.buildRepeats = 1;
+    return config;
+}
+
+void testBenchmarkCsv() {
+    const std::string path = tempPath("benchmark.csv");
+    const std::vector<Location> gowalla = generateSynthetic(SyntheticKind::Clustered, 500, 5);
+    BenchConfig config = tinyBenchConfig();
+
+    const size_t structures = makeAllIndexes().size();
+    const size_t perSize = structures * (config.ks.size() + config.radiiKm.size());
+
+    // 3 datasets at 2 sizes.
+    std::streambuf* quiet = std::cout.rdbuf(nullptr);
+    runBenchmark(gowalla, config, path);
+    std::vector<std::string> lines = readLines(path);
+    CHECK(lines.size() == 1 + 3 * 2 * perSize);
+    if (!lines.empty()) {
+        CHECK(lines[0] ==
+              "structure,dataset,n,query_type,param,queries,build_ms,mean_us,p95_us,"
+              "mean_results,memory_bytes");
+    }
+    CHECK(lines.size() > 1 && lines[1].rfind("BruteForce,gowalla,100,knn,1,30,", 0) == 0);
+
+    // With no real data only the 2 synthetic datasets run. A size equal to the
+    // dataset is kept, and the full-size pass doesn't repeat it.
+    config.sizes = {100};
+    runBenchmark({}, config, path);
+    CHECK(readLines(path).size() == 1 + 2 * perSize);
+    config.includeFullSize = true;
+    runBenchmark({}, config, path);
+    CHECK(readLines(path).size() == 1 + 2 * perSize);
+
+    // The full-size pass adds the dataset's own size when it isn't listed.
+    config.sizes = {100, 300};
+    runBenchmark(gowalla, config, path);
+    CHECK(readLines(path).size() == 1 + 3 * 3 * perSize);
+
+    // The time budget stops a measurement early but keeps the minimum query count.
+    config.budgetSeconds = 0.0;
+    config.includeFullSize = false;
+    config.sizes = {100};
+    runBenchmark({}, config, path);
+    lines = readLines(path);
+    CHECK(lines.size() > 1 && lines[1].rfind("BruteForce,uniform,100,knn,1,5,", 0) == 0);
+    std::cout.rdbuf(quiet);
+
+    std::remove(path.c_str());
+}
+
+void testTuningCsv() {
+    const std::string path = tempPath("tuning.csv");
+    const std::vector<Location> pts = generateSynthetic(SyntheticKind::Uniform, 200, 5);
+
+    std::vector<std::pair<int, int>> seen;
+    const TunableFactory factory = [&](int bucket, int depth) {
+        seen.push_back({bucket, depth});
+        return std::make_unique<BruteForce>();
+    };
+
+    std::streambuf* quiet = std::cout.rdbuf(nullptr);
+    runTuning(pts, factory, tinyBenchConfig(), path);
+    std::cout.rdbuf(quiet);
+
+    CHECK(seen.size() == 20);  // 5 bucket sizes x 4 depth limits
+    CHECK(seen.front() == std::make_pair(4, 12));
+    CHECK(seen.back() == std::make_pair(64, 24));
+    CHECK(readLines(path).size() == 21);
+    std::remove(path.c_str());
+}
+
 void testMismatchDetection() {
     const std::vector<Result> base = {{1, 1.0}, {2, 2.0}};
     CHECK(firstMismatch(base, base).empty());
@@ -349,6 +477,10 @@ int main() {
     testSynthetic();
     testBruteForce();
     testMismatchDetection();
+    testCleanStatsFile();
+    testPercentile();
+    testBenchmarkCsv();
+    testTuningCsv();
 
     BruteForce brute;
     failures += runIndexContract(brute);

@@ -23,6 +23,7 @@ add_library(nearby_core STATIC
   src/geo.cpp
   src/loader.cpp
   src/brute.cpp
+  src/bench.cpp
 )
 target_include_directories(nearby_core PUBLIC src)
 

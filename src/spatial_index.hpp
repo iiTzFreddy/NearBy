@@ -12,6 +12,7 @@
 // Rules for every implementation:
 //  - build() keeps a reference to `pts`, which must outlive the index. Store
 //    uint32_t indices into it, never copies of the coordinates.
+//  - build() can be called again and replaces everything from the previous call.
 //  - Results are sorted with ResultOrder and distances come from haversineKm.
 //  - kNearest returns min(k, n) results, or none when k <= 0.
 //  - withinRadius includes points at exactly r_km, and returns none when r_km < 0.

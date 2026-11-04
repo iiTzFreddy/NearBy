@@ -27,6 +27,12 @@ std::vector<Location> parseGowalla(const std::string& path, CleanStats& stats);
 void saveLocations(const std::string& path, const std::vector<Location>& pts);
 std::vector<Location> loadLocations(const std::string& path);
 
+// The counts from cleaning, stored beside the cache as `<cachePath>.stats` so the
+// menu can show them without re-reading the raw file. loadCleanStats returns
+// false if there is no usable stats file.
+void saveCleanStats(const std::string& cachePath, const CleanStats& stats);
+bool loadCleanStats(const std::string& cachePath, CleanStats& stats);
+
 enum class SyntheticKind {
     Uniform,    // evenly spread over the sphere
     Clustered,  // Gaussian blobs, imitating city clusters
