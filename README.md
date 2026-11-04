@@ -4,7 +4,7 @@ NearBy answers one question: how quickly can you find the k nearest places, or e
 
 **Team Coding Serpents:** Freddy Rives, Pedro Guevara, Alfonso Castano
 
-**Current status:** the data pipeline, brute force, benchmark, graphs and menu are in place. The k-d tree and quadtree are in progress; until they land, brute force is the only structure available.
+**Current status:** the data pipeline, brute force, k-d tree, quadtree, benchmark, graphs and menu are all in place, and both trees match brute force in the tests.
 
 ## Requirements
 
@@ -58,6 +58,15 @@ ctest --test-dir build -C Release --output-on-failure
 ```
 
 Brute force is the reference: every structure must return the same results in the same order, with identical distances.
+
+To run the same check on the real data, after cleaning it:
+
+```sh
+nearby verify                  # uses data/gowalla_clean.bin
+nearby verify path/to/data.bin
+```
+
+This compares every structure against brute force on 300 queries with a fixed seed, half on real locations and half spread over the whole globe, for k = 1, 5, 10, 100 and radii of 0.5, 5, 50 and 500 km. It prints the mismatch count per structure and exits with a nonzero code if any answer differs. Brute force is slow at full size, so this takes a few minutes.
 
 ## Run the benchmark and make the graphs
 

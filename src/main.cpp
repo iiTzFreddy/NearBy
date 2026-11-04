@@ -311,7 +311,8 @@ int usage() {
                  "  nearby                                  interactive menu\n"
                  "  nearby clean <raw_gowalla.txt> <out.bin>\n"
                  "  nearby generate <uniform|clustered> <n> <seed> <out.bin>\n"
-                 "  nearby bench [--quick] [data.bin]\n";
+                 "  nearby bench [--quick] [data.bin]\n"
+                 "  nearby verify [data.bin]\n";
     return 2;
 }
 
@@ -359,6 +360,17 @@ int runBench(const std::vector<std::string>& args) {
     return 0;
 }
 
+// Exit code 0 only if every structure matched brute force on every query.
+int runVerify(const std::string& dataPath) {
+    constexpr size_t kVerifyQueries = 300;
+    constexpr uint64_t kVerifySeed = 42;
+    const int mismatches =
+        verifyAgainstBruteForce(loadLocations(dataPath), kVerifyQueries, kVerifySeed, std::cout);
+    std::cout << (mismatches == 0 ? "All structures match brute force.\n"
+                                  : "FAILED: some structures differ from brute force.\n");
+    return mismatches == 0 ? 0 : 1;
+}
+
 }  // namespace
 
 int main(int argc, char** argv) {
@@ -372,6 +384,9 @@ int main(int argc, char** argv) {
         }
         if (args[0] == "bench" && args.size() <= 3) {
             return runBench(std::vector<std::string>(args.begin() + 1, args.end()));
+        }
+        if (args[0] == "verify" && args.size() <= 2) {
+            return runVerify(args.size() == 2 ? args[1] : kDefaultDataset);
         }
     } catch (const std::exception& error) {
         std::cerr << "error: " << error.what() << '\n';

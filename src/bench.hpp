@@ -3,6 +3,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <functional>
+#include <iosfwd>
 #include <memory>
 #include <string>
 #include <vector>
@@ -49,3 +50,10 @@ TunableFactory quadTreeFactory();
 // per combination.
 void runTuning(const std::vector<Location>& pts, const TunableFactory& factory,
                const BenchConfig& config, const std::string& csvPath);
+
+// Checks every structure from makeAllIndexes against BruteForce on `pts`, using
+// `queryCount` queries (half on data points, half uniform over the globe) for k in
+// {1, 5, 10, 100} and r in {0.5, 5, 50, 500} km. Prints one line per structure to
+// `out` and returns the total number of mismatches; 0 means every answer matched.
+int verifyAgainstBruteForce(const std::vector<Location>& pts, size_t queryCount, uint64_t seed,
+                            std::ostream& out);
