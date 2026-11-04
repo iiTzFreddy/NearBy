@@ -13,6 +13,7 @@
 
 #include "brute.hpp"
 #include "loader.hpp"
+#include "quadtree.hpp"
 
 namespace {
 
@@ -184,9 +185,9 @@ std::vector<Location> shuffled(std::vector<Location> pts, uint64_t seed) {
 std::vector<std::unique_ptr<SpatialIndex>> makeAllIndexes() {
     std::vector<std::unique_ptr<SpatialIndex>> indexes;
     indexes.push_back(std::make_unique<BruteForce>());
-    // When the trees land, add them here:
+    indexes.push_back(std::make_unique<QuadTree>());
+    // When the k-d tree lands, add it here:
     //   indexes.push_back(std::make_unique<KdTree>());
-    //   indexes.push_back(std::make_unique<QuadTree>());
     return indexes;
 }
 
@@ -275,7 +276,5 @@ void runTuning(const std::vector<Location>& pts, const TunableFactory& factory,
 }
 
 TunableFactory quadTreeFactory() {
-    // When QuadTree lands, return it here:
-    //   return [](int bucket, int depth) { return std::make_unique<QuadTree>(bucket, depth); };
-    return {};
+    return [](int bucket, int depth) { return std::make_unique<QuadTree>(bucket, depth); };
 }
