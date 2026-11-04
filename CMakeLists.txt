@@ -40,3 +40,8 @@ add_executable(nearby_quadtree_tests tests/test_quadtree.cpp)
 target_link_libraries(nearby_quadtree_tests PRIVATE nearby_core)
 target_include_directories(nearby_quadtree_tests PRIVATE tests)
 add_test(NAME nearby_quadtree_tests COMMAND nearby_quadtree_tests)
+
+add_executable(nearby_kdtree_tests tests/test_kdtree.cpp)
+target_link_libraries(nearby_kdtree_tests PRIVATE nearby_core)
+target_include_directories(nearby_kdtree_tests PRIVATE tests)
+add_test(NAME nearby_kdtree_tests COMMAND nearby_kdtree_tests)
