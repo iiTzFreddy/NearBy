@@ -45,3 +45,8 @@ add_executable(nearby_kdtree_tests tests/test_kdtree.cpp)
 target_link_libraries(nearby_kdtree_tests PRIVATE nearby_core)
 target_include_directories(nearby_kdtree_tests PRIVATE tests)
 add_test(NAME nearby_kdtree_tests COMMAND nearby_kdtree_tests)
+
+add_executable(nearby_edge_tests tests/test_edge_cases.cpp)
+target_link_libraries(nearby_edge_tests PRIVATE nearby_core)
+target_include_directories(nearby_edge_tests PRIVATE tests)
+add_test(NAME nearby_edge_tests COMMAND nearby_edge_tests)
