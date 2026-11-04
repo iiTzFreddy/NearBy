@@ -3,6 +3,8 @@
 #include <algorithm>
 #include <utility>
 
+#include "bounded_heap.hpp"
+
 namespace {
 
 // Moves every index for which `second` is true to the back of items[begin, end)
@@ -23,8 +25,8 @@ uint32_t partitionRange(std::vector<uint32_t>& items, uint32_t begin, uint32_t e
 }
 
 // A binary heap whose top() is the element that comes first under `before`, i.e.
-// no other element y has before(y, top()). Used two ways by kNearest: as a min-heap
-// of nodes by lower bound, and as a max-heap of results with the worst on top.
+// no other element y has before(y, top()). kNearest uses it as a min-heap of nodes
+// by lower bound; the k best results go in the shared BoundedMaxHeap instead.
 template <typename T, typename Before>
 class Heap {
 public:
@@ -144,21 +146,17 @@ void QuadTree::buildNode(uint32_t node, const Rect& box, uint32_t begin, uint32_
 // points found so far with the worst on top; once it is full, its top is the
 // distance a region must beat to be worth opening.
 std::vector<Result> QuadTree::kNearest(double lat, double lon, int k) const {
-    if (points_ == nullptr || nodes_.empty() || k <= 0) return {};
+    if (points_ == nullptr || points_->empty() || nodes_.empty() || k <= 0) return {};
 
     const std::vector<Location>& pts = *points_;
-    const size_t want = static_cast<size_t>(k);
-    const ResultOrder order{points_};
-
-    auto worstFirst = [&](const Result& a, const Result& b) { return order(b, a); };
-    Heap<Result, decltype(worstFirst)> best(worstFirst);
+    BoundedMaxHeap best(std::min(static_cast<size_t>(k), pts.size()), pts);
 
     auto closestFirst = [](const PendingNode& a, const PendingNode& b) { return a.bound < b.bound; };
     Heap<PendingNode, decltype(closestFirst)> pending(closestFirst);
 
     // Pruning is strict (">"): a region whose bound equals the k-th distance can
     // still hold a point at that same distance with a smaller id.
-    auto cannotHelp = [&](double bound) { return best.size() == want && bound > best.top().dist_km; };
+    auto cannotHelp = [&](double bound) { return best.full() && bound > best.top().dist_km; };
 
     const Rect world{-90.0, 90.0, -180.0, 180.0};
     pending.push({minDistToRectKm(lat, lon, world), 0, world});
@@ -173,13 +171,7 @@ std::vector<Result> QuadTree::kNearest(double lat, double lon, int k) const {
         if (isLeaf(node)) {
             for (uint32_t s = node.begin; s < node.begin + node.count; ++s) {
                 const uint32_t idx = items_[s];
-                const Result candidate{idx, haversineKm(lat, lon, pts[idx].lat, pts[idx].lon)};
-                if (best.size() < want) {
-                    best.push(candidate);
-                } else if (order(candidate, best.top())) {
-                    best.pop();
-                    best.push(candidate);
-                }
+                best.offer({idx, haversineKm(lat, lon, pts[idx].lat, pts[idx].lon)});
             }
             continue;
         }
@@ -194,13 +186,7 @@ std::vector<Result> QuadTree::kNearest(double lat, double lon, int k) const {
         }
     }
 
-    // The heap gives the worst result first, so fill the answer from the back.
-    std::vector<Result> results(best.size());
-    for (size_t i = results.size(); i-- > 0;) {
-        results[i] = best.top();
-        best.pop();
-    }
-    return results;
+    return best.takeSorted();
 }
 
 std::vector<Result> QuadTree::withinRadius(double lat, double lon, double r_km) const {
