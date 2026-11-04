@@ -591,9 +591,6 @@ int main() {
     KdTree kdTree;
     failures += runIndexContract(kdTree);
 
-    // When the quadtree lands, add it here:
-    //   QuadTree quadTree; failures += runIndexContract(quadTree);
-
     if (failures != 0) {
         std::cerr << failures << " check(s) failed\n";
         return 1;

@@ -187,11 +187,7 @@ std::vector<std::unique_ptr<SpatialIndex>> makeAllIndexes() {
     std::vector<std::unique_ptr<SpatialIndex>> indexes;
     indexes.push_back(std::make_unique<BruteForce>());
     indexes.push_back(std::make_unique<QuadTree>());
-    // When the k-d tree lands, add it here:
-    //   indexes.push_back(std::make_unique<KdTree>());
     indexes.push_back(std::make_unique<KdTree>());
-    // When the quadtree lands, add it here:
-    //   indexes.push_back(std::make_unique<QuadTree>());
     return indexes;
 }
 

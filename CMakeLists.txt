@@ -18,7 +18,6 @@ else()
   add_compile_options(-Wall -Wextra -Wpedantic)
 endif()
 
-# Add src/quadtree.cpp here when it lands.
 add_library(nearby_core STATIC
   src/geo.cpp
   src/loader.cpp

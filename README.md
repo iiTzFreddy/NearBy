@@ -4,7 +4,7 @@ NearBy answers one question: how quickly can you find the k nearest places, or e
 
 **Team Coding Serpents:** Freddy Rives, Pedro Guevara, Alfonso Castano
 
-**Current status:** the data pipeline, brute force, benchmark, graphs and menu are in place. The k-d tree and quadtree are in progress; until they land, brute force is the only structure available.
+**Current status:** the data pipeline, brute force, k-d tree, quadtree, benchmark, graphs and menu are all in place, and both trees match brute force in the tests.
 
 ## Requirements
 
